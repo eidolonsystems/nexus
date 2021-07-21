@@ -28,6 +28,7 @@
 #include "Spire/Ui/OverlayPanel.hpp"
 #include "Spire/Ui/QuantityBox.hpp"
 #include "Spire/Ui/ScalarFilterPanel.hpp"
+#include "Spire/Ui/ScrollableListBox.hpp"
 #include "Spire/Ui/ScrollBar.hpp"
 #include "Spire/Ui/ScrollBox.hpp"
 #include "Spire/Ui/SearchBox.hpp"
@@ -1190,6 +1191,7 @@ UiProfile Spire::make_scroll_box_profile() {
     "horizontal_display_policy", display_policy_property));
   properties.push_back(make_standard_enum_property(
     "vertical_display_policy", display_policy_property));
+  properties.push_back(make_standard_property("border_size", 1));
   auto profile = UiProfile(QString::fromUtf8("ScrollBox"), properties,
     [] (auto& profile) {
       auto label = new QLabel();
@@ -1211,7 +1213,61 @@ UiProfile Spire::make_scroll_box_profile() {
       vertical_display_policy.connect_changed_signal([scroll_box] (auto value) {
         scroll_box->set_vertical(value);
       });
+      auto& border_size = get<int>("border_size", profile.get_properties());
+      border_size.connect_changed_signal([scroll_box] (auto value) {
+        auto style = get_style(*scroll_box);
+        style.get(Any()).
+          set(border(scale_width(value), QColor::fromRgb(0xC8, 0xC8, 0xC8)));
+        set_style(*scroll_box, std::move(style));
+      });
       return scroll_box;
+    });
+  return profile;
+}
+
+UiProfile Spire::make_scrollable_list_box_profile() {
+  auto properties = std::vector<std::shared_ptr<UiProperty>>();
+  populate_widget_properties(properties);
+  auto direction_property = define_enum<Qt::Orientation>(
+    {{"Vertical", Qt::Vertical}, {"Horizontal", Qt::Horizontal}});
+  properties.push_back(
+    make_standard_enum_property("direction", direction_property));
+  auto overflow_property = define_enum<ListView::Overflow>(
+    {{"NONE", ListView::Overflow::NONE}, {"WRAP", ListView::Overflow::WRAP}});
+  properties.push_back(
+    make_standard_enum_property("overflow", overflow_property));
+  auto profile = UiProfile(QString::fromUtf8("ScrollableListBox"), properties,
+    [] (auto& profile) {
+      auto& direction = get<Qt::Orientation>("direction",
+        profile.get_properties());
+      auto& overflow = get<ListView::Overflow>("overflow",
+        profile.get_properties());
+      auto container = new QWidget();
+      apply_widget_properties(container, profile.get_properties());
+      auto layout = new QHBoxLayout(container);
+      layout->setContentsMargins({});
+      auto list_model = std::make_shared<ArrayListModel>();
+      for(auto i = 0; i < 15; ++i) {
+        list_model->push(QString::fromUtf8("Item%1").arg(i));
+      }
+      auto current_model = std::make_shared<ListView::LocalCurrentModel>();
+      auto list_view = new ListView(current_model, list_model,
+        [] (auto model, auto index) {
+          auto label = make_label(model->get<QString>(index));
+          return label;
+        });
+      list_view->set_direction(direction.get());
+      list_view->set_overflow(overflow.get());
+      auto scrollable_list_box = new ScrollableListBox(list_view);
+      scrollable_list_box->setSizePolicy(QSizePolicy::Expanding,
+        QSizePolicy::Expanding);
+      layout->addWidget(scrollable_list_box);
+      if(direction.get() == Qt::Vertical) {
+        container->setMaximumHeight(scale_height(240));
+      } else {
+        container->setMaximumWidth(scale_width(240));
+      }
+      return container;
     });
   return profile;
 }

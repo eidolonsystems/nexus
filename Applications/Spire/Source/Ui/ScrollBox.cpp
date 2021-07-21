@@ -1,6 +1,8 @@
 #include "Spire/Ui/ScrollBox.hpp"
 #include <QEvent>
 #include <QHBoxLayout>
+#include "Spire/Styles/Stylist.hpp"
+#include "Spire/Ui/Box.hpp"
 #include "Spire/Ui/LayeredWidget.hpp"
 #include "Spire/Ui/ScrollBar.hpp"
 #include "Spire/Ui/ScrollableLayer.hpp"
@@ -12,6 +14,7 @@ ScrollBox::ScrollBox(QWidget* body, QWidget* parent)
     : QWidget(parent),
       m_body(body) {
   auto layers = new LayeredWidget(this);
+  layers->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   auto viewport = new QWidget();
   m_body->installEventFilter(this);
   m_body->setParent(viewport);
@@ -24,9 +27,11 @@ ScrollBox::ScrollBox(QWidget* body, QWidget* parent)
   m_scrollable_layer->get_horizontal_scroll_bar().installEventFilter(this);
   m_scrollable_layer->get_vertical_scroll_bar().installEventFilter(this);
   layers->add(m_scrollable_layer);
+  m_box = new Box(layers);
+  proxy_style(*this, *m_box);
   auto layout = new QHBoxLayout(this);
   layout->setContentsMargins({});
-  layout->addWidget(layers);
+  layout->addWidget(m_box);
   setFocusPolicy(Qt::StrongFocus);
   update_ranges();
 }
@@ -79,6 +84,14 @@ void ScrollBox::set(DisplayPolicy horizontal_policy,
   set_vertical(vertical_policy);
 }
 
+ScrollBar& ScrollBox::get_vertical_scroll_bar() {
+  return m_scrollable_layer->get_vertical_scroll_bar();
+}
+
+ScrollBar& ScrollBox::get_horizontal_scroll_bar() {
+  return m_scrollable_layer->get_horizontal_scroll_bar();
+}
+
 bool ScrollBox::eventFilter(QObject* watched, QEvent* event) {
   if(watched != m_body) {
     if(event->type() == QEvent::Show || event->type() == QEvent::Hide) {
@@ -103,50 +116,56 @@ void ScrollBox::wheelEvent(QWheelEvent* event) {
   m_scrollable_layer->wheelEvent(event);
 }
 
-void ScrollBox::on_vertical_scroll(int position) {
-  m_body->move(m_body->pos().x(), -position);
-}
-
-void ScrollBox::on_horizontal_scroll(int position) {
-  m_body->move(-position, m_body->pos().y());
-}
-
 void ScrollBox::update_ranges() {
-  auto bar_width = [&] {
+  auto get_bar_width = [&] {
     if(m_scrollable_layer->get_vertical_scroll_bar().isVisible()) {
       return m_scrollable_layer->get_vertical_scroll_bar().width();
     }
     return 0;
-  }();
-  auto bar_height = [&] {
+  };
+  auto get_bar_height = [&] {
     if(m_scrollable_layer->get_horizontal_scroll_bar().isVisible()) {
       return m_scrollable_layer->get_horizontal_scroll_bar().height();
     }
     return 0;
-  }();
-  auto viewport_size = m_body->size() + QSize(bar_width, bar_height);
-  setMaximumSize(viewport_size);
+  };
+  auto border_size = get_border_size(*this);
+  auto viewport_size = m_body->size() + border_size;
   if(m_vertical_display_policy == DisplayPolicy::ON_OVERFLOW) {
-    if(viewport_size.height() <= height()) {
+    if(viewport_size.height() <= height() - get_bar_height()) {
       m_scrollable_layer->get_vertical_scroll_bar().hide();
     } else {
       m_scrollable_layer->get_vertical_scroll_bar().show();
     }
   }
   if(m_horizontal_display_policy == DisplayPolicy::ON_OVERFLOW) {
-    if(viewport_size.width() <= width()) {
+    if(viewport_size.width() <= width() - get_bar_width()) {
       m_scrollable_layer->get_horizontal_scroll_bar().hide();
     } else {
       m_scrollable_layer->get_horizontal_scroll_bar().show();
     }
   }
-  auto vertical_range = std::max(m_body->height() - height() + bar_height, 0);
-  auto horizontal_range = std::max(m_body->width() - width() + bar_width, 0);
+  setMaximumSize(viewport_size + QSize(get_bar_width(), get_bar_height()));
+  auto new_size = size() - border_size;
+  auto vertical_range = std::max(m_body->height() - new_size.height() +
+    get_bar_height(), 0);
+  auto horizontal_range = std::max(m_body->width() - new_size.width() +
+    get_bar_width(), 0);
   m_scrollable_layer->get_vertical_scroll_bar().set_range(0, vertical_range);
-  m_scrollable_layer->get_vertical_scroll_bar().set_page_size(height());
+  m_scrollable_layer->get_vertical_scroll_bar().set_page_size(
+    new_size.height());
   m_scrollable_layer->get_horizontal_scroll_bar().set_range(
     0, horizontal_range);
-  m_scrollable_layer->get_horizontal_scroll_bar().set_page_size(width());
+  m_scrollable_layer->get_horizontal_scroll_bar().set_page_size(
+    new_size.width());
+}
+
+void ScrollBox::on_vertical_scroll(int position) {
+  m_body->move(m_body->pos().x(), -position);
+}
+
+void ScrollBox::on_horizontal_scroll(int position) {
+  m_body->move(-position, m_body->pos().y());
 }
 
 std::unordered_set<Stylist*> BaseComponentFinder<ScrollBox, Body>::operator ()(

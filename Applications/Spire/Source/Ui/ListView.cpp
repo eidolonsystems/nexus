@@ -56,6 +56,7 @@ ListView::ListView(std::shared_ptr<CurrentModel> current_model,
   for(auto i = 0; i < m_list_model->get_size(); ++i) {
     auto value = m_list_model->at(i);
     auto list_item = new ListItem(m_factory(m_list_model, i), this);
+    update_item_size_policy(list_item);
     m_items.push_back({list_item, connect_item_current(list_item, value),
       connect_item_submit(list_item, value)});
   }
@@ -82,6 +83,9 @@ Qt::Orientation ListView::get_direction() const {
 
 void ListView::set_direction(Qt::Orientation direction) {
   m_direction = direction;
+  for(const auto& item : m_items) {
+    update_item_size_policy(item.m_item);
+  }
   update_layout();
 }
 
@@ -125,9 +129,21 @@ const std::any& ListView::get_selected() const {
   return m_selected;
 }
 
+ListItem* ListView::get_item(const std::any& value) const {
+  auto index = get_index_by_value(value);
+  if(index < 0 || index >= m_list_model->get_size()) {
+    return nullptr;
+  }
+  return m_items[index].m_item;
+}
+
 connection ListView::connect_submit_signal(
     const SubmitSignal::slot_type& slot) const {
   return m_submit_signal.connect(slot);
+}
+
+QSize ListView::sizeHint() const {
+  return m_body->sizeHint();
 }
 
 void ListView::keyPressEvent(QKeyEvent* event) {
@@ -252,7 +268,7 @@ int ListView::get_index_by_value(const std::any& value) const {
   return -1;
 }
 
-QLayout* Spire::ListView::get_layout() {
+QLayout* ListView::get_layout() {
   return m_body->layout();
 }
 
@@ -534,6 +550,14 @@ void ListView::update_selection(const std::any& selected) {
   select_item(false);
   m_selected = selected;
   select_item(true);
+}
+
+void ListView::update_item_size_policy(ListItem* item) {
+  if(m_direction == Qt::Vertical) {
+    item->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+  } else {
+    item->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+  }
 }
 
 void ListView::query() {

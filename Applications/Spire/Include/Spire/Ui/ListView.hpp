@@ -151,9 +151,17 @@ namespace Styles {
       /** Returns the value of the selected list item. */
       const std::any& get_selected() const;
 
+      /**
+      * Returns the ListItem connected the specified value.
+      * @param value The value associated with an item.
+      */
+      ListItem* get_item(const std::any& value) const;
+
       /** Connects a slot to the submit signal. */
       boost::signals2::connection connect_submit_signal(
         const SubmitSignal::slot_type& slot) const;
+
+      QSize sizeHint() const override;
 
     protected:
       void keyPressEvent(QKeyEvent* event) override;
@@ -209,6 +217,7 @@ namespace Styles {
       void update_current(int index);
       void update_after_items_changed();
       void update_selection(const std::any& selected);
+      void update_item_size_policy(ListItem* item);
       void query();
   };
 }
